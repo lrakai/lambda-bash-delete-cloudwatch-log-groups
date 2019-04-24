@@ -12,6 +12,7 @@ Resources:
     Properties:
       FunctionName: DeleteLogGroups
       Handler: handler.handler
+      Layers: ['arn:aws:lambda:us-west-2:744348701589:layer:bash:5']
       Role: !GetAtt 
         - LambdaExecutionRole
         - Arn
