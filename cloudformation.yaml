@@ -1,0 +1,68 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Deploy Lambda Function to delete all CloudWatch log groups
+Resources:
+  CustomResource:
+    Type: 'Custom::DeleteLogGroups'
+    Properties:
+      ServiceToken: !GetAtt 
+        - DeleteLogGroups
+        - Arn
+  DeleteLogGroups:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: DeleteLogGroups
+      Handler: handler.handler
+      Role: !GetAtt 
+        - LambdaExecutionRole
+        - Arn
+      MemorySize: 128
+      Timeout: 900
+      Code:
+        ZipFile: !Join 
+          - ''
+
+          - - ''
+            - 'function handler () {'
+            - '   set -e'
+            - ''
+            - '   # Event Data is sent as the first parameter'
+            - '   EVENT_DATA=$1'
+            - ''
+            - '   # Example of command usage'
+            - '   EVENT_JSON=$(echo $EVENT_DATA | jq .)'
+            - ''
+            - '   aws logs describe-log-groups --query "logGroups[*].logGroupName" --output table |'
+            - '   awk "{print $2}" |'
+            - '   grep -v ^$ |'
+            - '   tail -n +2 | # skip table title line'
+            - '   while read x; do'
+            - '       echo deleting log group $x'
+            - '       aws logs delete-log-group --log-group-name $x 2>&1'
+            - '   done'
+            - ''
+            - '   # This is the return value because it is being sent to stderr (>&2)'
+            - '    echo "{\"success\": true}" >&2'
+            - '}'
+      Runtime: provided
+  LambdaExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:*'
+                Resource: 'arn:aws:logs:*:*:*'
