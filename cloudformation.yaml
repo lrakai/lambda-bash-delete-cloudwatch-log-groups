@@ -21,7 +21,7 @@ Resources:
       Timeout: 900
       Code:
         S3Bucket: !Ref src
-        S3Key: handler.sh
+        S3Key: handler.zip
       Runtime: provided
   DeleteLogGroupsLambdaExecutionRole:
     Type: 'AWS::IAM::Role'
