@@ -111,7 +111,7 @@ Resources:
                             copy_to_s3(url, bucket)
             
                     except Exception as e:
-                        print(e)'
+                        print(e)
                         cfnresponse.send(event, context, cfnresponse.FAILED, {
                                          'Response': 'Failure'})
                         return
