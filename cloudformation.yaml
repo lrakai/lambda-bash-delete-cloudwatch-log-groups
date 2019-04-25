@@ -57,7 +57,7 @@ Resources:
         - Arn
       S3BucketName: !Ref src
       Urls:
-        - 'https://raw.githubusercontent.com/lrakai/lambda-bash-delete-cloudwatch-log-groups/master/handler.sh'
+        - 'https://github.com/lrakai/lambda-bash-delete-cloudwatch-log-groups/raw/master/handler.zip'
   CopyFilesToS3:
     Type: 'AWS::Lambda::Function'
     Properties:
