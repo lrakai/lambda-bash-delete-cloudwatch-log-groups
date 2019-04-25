@@ -9,43 +9,21 @@ Resources:
         - Arn
   DeleteLogGroups:
     Type: 'AWS::Lambda::Function'
+    DependsOn: S3Copy
     Properties:
       FunctionName: DeleteLogGroups
       Handler: handler.handler
       Layers: ['arn:aws:lambda:us-west-2:744348701589:layer:bash:5']
       Role: !GetAtt 
-        - LambdaExecutionRole
+        - DeleteLogGroupsLambdaExecutionRole
         - Arn
       MemorySize: 128
       Timeout: 900
       Code:
-        ZipFile: !Join 
-          - ''
-
-          - - ''
-            - 'function handler () {'
-            - '   set -e'
-            - ''
-            - '   # Event Data is sent as the first parameter'
-            - '   EVENT_DATA=$1'
-            - ''
-            - '   # Example of command usage'
-            - '   EVENT_JSON=$(echo $EVENT_DATA | jq .)'
-            - ''
-            - '   aws logs describe-log-groups --query "logGroups[*].logGroupName" --output table |'
-            - '   awk "{print $2}" |'
-            - '   grep -v ^$ |'
-            - '   tail -n +2 | # skip table title line'
-            - '   while read x; do'
-            - '       echo deleting log group $x'
-            - '       aws logs delete-log-group --log-group-name $x 2>&1'
-            - '   done'
-            - ''
-            - '   # This is the return value because it is being sent to stderr (>&2)'
-            - '    echo "{\"success\": true}" >&2'
-            - '}'
+        S3Bucket: !Ref src
+        S3Key: handler.sh
       Runtime: provided
-  LambdaExecutionRole:
+  DeleteLogGroupsLambdaExecutionRole:
     Type: 'AWS::IAM::Role'
     Properties:
       AssumeRolePolicyDocument:
@@ -79,7 +57,7 @@ Resources:
         - Arn
       S3BucketName: !Ref src
       Urls:
-        - 'https://s3-us-west-2.amazonaws.com/ecslabtest2017/ecslabblue.zip'
+        - 'https://raw.githubusercontent.com/lrakai/lambda-bash-delete-cloudwatch-log-groups/master/handler.sh'
   CopyFilesToS3:
     Type: 'AWS::Lambda::Function'
     Properties:
@@ -170,3 +148,114 @@ Resources:
                 Action:
                   - 's3:PutObject'
                 Resource: '*'
+  
+  S3CleanupCustomLambdaEvent:
+    Type: 'AWS::CloudFormation::CustomResource'
+    Version: '1.0'
+    Properties:
+      ServiceToken:
+        'Fn::GetAtt':
+          - EmptyBucket
+          - Arn
+      BucketName: !Ref: src
+  EmptyBucket:
+    Type: 'AWS::Lambda::Function'
+    DependsOn: CPUUtilization
+    Properties:
+      Handler: index.lambda_handler
+      Role:
+        'Fn::GetAtt':
+          - EmptyBucketLambdaExecutionRole
+          - Arn
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+          import cfnresponse
+          from botocore.vendored import requests
+
+
+          def lambda_handler(event, context):
+              
+              try:
+                  bucket = os.environ['bucket']
+                  client = boto3.client('s3')
+                  object_response_paginator = client.get_paginator('list_object_versions')
+
+                  if event['RequestType'] == 'Delete':
+                      
+                      delete_marker_list = []
+                      version_list = []
+                      
+                      for object_response_itr in object_response_paginator.paginate(Bucket=bucket):
+                          if 'DeleteMarkers' in object_response_itr:
+                              for delete_marker in object_response_itr['DeleteMarkers']:
+                                  delete_marker_list.append({'Key': delete_marker['Key'], 'VersionId': delete_marker['VersionId']})
+                      
+                          if 'Versions' in object_response_itr:
+                              for version in object_response_itr['Versions']:
+                                  version_list.append({'Key': version['Key'], 'VersionId': version['VersionId']})
+                      
+                      for i in range(0, len(delete_marker_list), 1000):
+                          response = client.delete_objects(
+                              Bucket=bucket,
+                              Delete={
+                                  'Objects': delete_marker_list[i:i+1000],
+                                  'Quiet': True
+                              }
+                          )
+                          print(response)
+                      
+                      for i in range(0, len(version_list), 1000):
+                          response = client.delete_objects(
+                              Bucket=bucket,
+                              Delete={
+                                  'Objects': version_list[i:i+1000],
+                                  'Quiet': True
+                              }
+                          )
+                          print(response)
+
+                  responseData = {'status':'Success'}
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData) 
+              except Exception as e:
+                  print(e)
+
+                  responseData = {'status':'Failed'}
+                  cfnresponse.send(event, context, cfnresponse.FAILED, responseData) 
+      Runtime: python3.6
+      Timeout: 500
+      Environment:
+        Variables:
+          bucket: !Ref src
+  EmptyBucketLambdaExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+      - PolicyName: emptyBucketPolicy
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - 's3:*'
+              Resource:
+                'Fn::Join':
+                  - ''
+                  - - 'arn:aws:s3:::'
+                    - Ref: src
+                    - /*
+            - Effect: Allow
+              Action:
+                - 'logs:*'
+              Resource: 'arn:aws:logs:*:*:*'
