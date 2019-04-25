@@ -157,10 +157,9 @@ Resources:
         'Fn::GetAtt':
           - EmptyBucket
           - Arn
-      BucketName: !Ref: src
+      BucketName: !Ref src
   EmptyBucket:
     Type: 'AWS::Lambda::Function'
-    DependsOn: CPUUtilization
     Properties:
       Handler: index.lambda_handler
       Role:
