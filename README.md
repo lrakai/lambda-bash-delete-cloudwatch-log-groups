@@ -10,3 +10,4 @@ Deploy the CloudFormation template to create and run the function the first time
 
 - The function may time out depending on how many log groups you have. Run the function again to continue deleting.
 - The Lambda function itself will create a Log Group. You can remove 'logs:*' permisison from the Lambda execution roles if this is undesirable
+- The bash handler does not currently signal to the CloudFormation custom resource when it is complete. The bash equivalent of [cfn-response](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-lambda-function-code.html#w2ab1c21c10d177c21c17c11c15) is needed to make the stack appear complete. The function will complete despite the stack not knowing.
